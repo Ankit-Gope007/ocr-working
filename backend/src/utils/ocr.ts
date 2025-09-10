@@ -27,3 +27,4 @@ export async function runOCR(imagePath: string): Promise<string> {
 
   return data.text;
 }
+

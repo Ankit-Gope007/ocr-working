@@ -12,5 +12,4 @@ app.use(express.json());
 app.use("/api/ocr", ocrRoutes);
 
 
-
 export default app;

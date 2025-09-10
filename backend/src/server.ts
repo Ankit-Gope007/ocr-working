@@ -1,3 +1,4 @@
+import "dotenv/config";
 import app from "./app";
 const PORT = process.env.PORT || 8000;
 import { connectDB } from "./utils/connectDb";
@@ -9,4 +10,5 @@ connectDB().then(() => {
   });
 }).catch((err) => {
   console.error("❌ Failed to start server:", err);
+
 });

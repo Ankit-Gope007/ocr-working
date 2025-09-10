@@ -2,11 +2,12 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { apiBase } from "@/utils/apiRoute";
+import { ParsedStudentData, OCRResponse } from "@/types/student";
 
 export default function HomePage() {
   const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState<string>("");
-  const [parsed, setParsed] = useState<Record<string, unknown> | null>(null);
+  const [parsed, setParsed] = useState<ParsedStudentData | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -26,13 +27,13 @@ export default function HomePage() {
       setRawText("");
       setParsed(null);
 
-      const res = await axios.post(`${apiBase}/ocr/upload`, formData, {
+      const res = await axios.post<OCRResponse>(`${apiBase}/ocr/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
       console.log(res.data);
 
-      // Assuming backend returns { rawText, parsed }
+      // Set the OCR text and parsed data
       setRawText(res.data.rawText);
       setParsed(res.data.parsed);
 
@@ -95,11 +96,52 @@ export default function HomePage() {
             {rawText}
           </pre>
 
-          <h2 className="text-xl font-semibold text-green-300 mb-2">✅ Parsed Details</h2>
+          <h2 className="text-xl font-semibold text-green-300 mb-2">✅ Parsed Student Details</h2>
           <div className="bg-gray-800 rounded p-4 text-gray-200">
-            <pre className="whitespace-pre-wrap max-h-64 overflow-auto">
-              {JSON.stringify(parsed, null, 2)}
-            </pre>
+            {parsed?.student_info ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div>
+                    <span className="font-semibold text-blue-300">Name:</span>
+                    <span className="ml-2">{parsed.student_info.name || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-300">Institution:</span>
+                    <span className="ml-2">{parsed.student_info.institution || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-300">Registration No:</span>
+                    <span className="ml-2">{parsed.student_info.registration_no || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-300">Date of Birth:</span>
+                    <span className="ml-2">{parsed.student_info.date_of_birth || 'Not found'}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <span className="font-semibold text-blue-300">Blood Group:</span>
+                    <span className="ml-2">{parsed.student_info.blood_group || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-300">Programme:</span>
+                    <span className="ml-2">{parsed.student_info.programme || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-300">Department:</span>
+                    <span className="ml-2">{parsed.student_info.department || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-300">Valid Until:</span>
+                    <span className="ml-2">{parsed.student_info.valid_until || 'Not found'}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <pre className="whitespace-pre-wrap max-h-64 overflow-auto">
+                {JSON.stringify(parsed, null, 2)}
+              </pre>
+            )}
           </div>
         </div>
       )}

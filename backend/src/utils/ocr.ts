@@ -6,3 +6,4 @@ export async function runOCR(imagePath: string): Promise<string> {
   });
   return result.data.text;
 }
+

@@ -45,7 +45,7 @@ export const processDocument = async (req: Request, res: Response) => {
     
     // 4. Save userId if present
     if (parsedData) {
-      await saveUserId(parsedData);
+      await saveUserId(parsedData.student_info);
     }
 
 

@@ -2,7 +2,7 @@ import express from "express";
 import multer from "multer";
 import path from "path";
 import { runOCR } from "../utils/ocr";
-import { parseCBSECertificate } from "../utils/parser";
+import { parseCollegeIDCard } from "../utils/parser";
 
 const router = express.Router();
 
@@ -18,7 +18,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     const ocrText = await runOCR(imagePath);
 
     // 2. Run parser
-    const parsedData = parseCBSECertificate(ocrText);
+    const parsedData = parseCollegeIDCard(ocrText);
 
     // 3. Return structured response
     res.json({

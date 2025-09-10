@@ -1,50 +1,43 @@
-export interface ParsedResult {
-  rollNo?: string;
-  candidateName?: string;
-  motherName?: string;
-  fatherName?: string;
+export interface ParsedCollegeID {
+  name?: string;
   dob?: string;
-  subjects?: Record<string, number>;
-  result?: string;
+  regnNo?: string;
+  bloodGroup?: string;
+  programme?: string;
+  department?: string;
+  validUpto?: string;
 }
 
-export function parseCBSECertificate(ocrText: string): ParsedResult {
-  const data: ParsedResult = {
-    subjects: {}
-  };
+export function parseCollegeIDCard(ocrText: string): ParsedCollegeID {
+  const data: ParsedCollegeID = {};
 
-  // Roll number
-  const rollMatch = ocrText.match(/Roll\s*No[:\s]*([0-9]+)/i);
-  if (rollMatch) data.rollNo = rollMatch[1];
-
-  // Candidate Name
-  const nameMatch = ocrText.match(/Name[:\s]*([A-Z\s]+)/i);
-  if (nameMatch) data.candidateName = nameMatch[1].trim();
-
-  // Mother’s Name
-  const motherMatch = ocrText.match(/Mother[’'`s ]*Name[:\s]*([A-Z\s]+)/i);
-  if (motherMatch) data.motherName = motherMatch[1].trim();
-
-  // Father/Guardian Name
-  const fatherMatch = ocrText.match(/Father[’'`s \/Guardian]*Name[:\s]*([A-Z\s]+)/i);
-  if (fatherMatch) data.fatherName = fatherMatch[1].trim();
+  // Name
+  const nameMatch = ocrText.match(/Name\s*:?([A-Z\s]+)/i);
+  if (nameMatch) data.name = nameMatch[1].trim();
 
   // DOB
-  const dobMatch = ocrText.match(/(\d{2}[-/]\d{2}[-/]\d{4})/);
+  const dobMatch = ocrText.match(/DOB\s*:?(\d{2}[-/]\d{2}[-/]\d{4})/i);
   if (dobMatch) data.dob = dobMatch[1];
 
-  // Subjects (look for lines like "ENGLISH ... 71")
-  const subjectRegex = /(ENGLISH|HINDI|MATHEMATICS|SCIENCE|SOCIAL\s*SCIENCE|INFORMATION\s*TECHNOLOGY).*?(\d{2,3})/gi;
-  let match;
-  while ((match = subjectRegex.exec(ocrText)) !== null) {
-    const subject = match[1].trim();
-    const marks = parseInt(match[2], 10);
-    data.subjects![subject] = marks;
-  }
+  // Registration Number
+  const regnMatch = ocrText.match(/Regn\s*No\.?\s*:?([A-Z0-9]+)/i);
+  if (regnMatch) data.regnNo = regnMatch[1];
 
-  // Result
-  const resultMatch = ocrText.match(/Result[:\s]*(PASS|FAIL)/i);
-  if (resultMatch) data.result = resultMatch[1].toUpperCase();
+  // Blood Group
+  const bloodMatch = ocrText.match(/Blood\s*Gr\.?\s*:?([A-Z0-9+\-]+)/i);
+  if (bloodMatch) data.bloodGroup = bloodMatch[1];
+
+  // Programme
+  const progMatch = ocrText.match(/Programme\s*:?([A-Za-z0-9\s]+)/i);
+  if (progMatch) data.programme = progMatch[1].trim();
+
+  // Department
+  const deptMatch = ocrText.match(/Department\s*:?([A-Za-z0-9\s]+)/i);
+  if (deptMatch) data.department = deptMatch[1].trim();
+
+  // Valid Upto
+  const validMatch = ocrText.match(/Valid\s*upto\s*:?(\d{2}[-/]\d{2}[-/]\d{4})/i);
+  if (validMatch) data.validUpto = validMatch[1];
 
   return data;
 }

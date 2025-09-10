@@ -3,29 +3,38 @@ import path from "path";
 import fs from "fs";
 import { preprocessImage } from "../utils/preprocess";
 import { runOCR } from "../utils/ocr";
+import { parseCollegeIDCard } from "../utils/parser";
 
 export const processDocument = async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
-
+    // Paths
     const inputPath = req.file.path;
     const processedPath = path.join("uploads", `processed-${Date.now()}.png`);
 
-    // Preprocess image
+    //1.  Preprocess image
     await preprocessImage(inputPath, processedPath);
 
-    // Run OCR
+    // 2. Run OCR
     const text = await runOCR(processedPath);
+
+    // 3. Parse text (example for college ID card)
+    const parsedData = parseCollegeIDCard(text);
 
     // Cleanup input (keep processed for debugging if needed)
     fs.unlinkSync(inputPath);
+    // fs.unlinkSync(processedPath); // Uncomment to delete processed image after OCR
+    fs.unlinkSync(processedPath);
 
     res.json({
       message: "Document processed successfully",
-      extractedText: text,
+      
       processedFile: processedPath,
+    
+      rawText: text,
+      parsed: parsedData,
     });
   } catch (err) {
     console.error("OCR Error:", err);

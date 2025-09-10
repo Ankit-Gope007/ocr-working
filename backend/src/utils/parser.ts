@@ -41,3 +41,4 @@ export function parseCollegeIDCard(ocrText: string): ParsedCollegeID {
 
   return data;
 }
+

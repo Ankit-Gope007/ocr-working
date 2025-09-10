@@ -4,6 +4,7 @@ import fs from "fs";
 import { preprocessImage } from "../utils/preprocess";
 import { runOCR } from "../utils/ocr";
 import { parseCollegeIDCard } from "../utils/parser";
+import { saveUserId } from "./dbControllers/UserId.controller";
 
 export const processDocument = async (req: Request, res: Response) => {
   try {
@@ -16,7 +17,7 @@ export const processDocument = async (req: Request, res: Response) => {
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
-    
+
     // Paths
     const inputPath = req.file.path;
     const processedPath = path.join("uploads", `processed-${Date.now()}.png`);
@@ -29,6 +30,12 @@ export const processDocument = async (req: Request, res: Response) => {
 
     // 3. Parse text (example for college ID card)
     const parsedData = parseCollegeIDCard(text);
+
+    // 4. Save userId if present
+    if (parsedData) {
+      await saveUserId(parsedData);
+    }
+
 
     // Cleanup input (keep processed for debugging if needed)
     fs.unlinkSync(inputPath);

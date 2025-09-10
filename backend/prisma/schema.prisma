@@ -13,3 +13,18 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// ID Card model
+model UserIDCard {
+  id             String   @id @default(uuid())
+  name           String
+  institution    String
+  registrationNo String   @map("registration_no")
+  dateOfBirth    String   @map("date_of_birth")
+  bloodGroup     String   @map("blood_group")
+  programme      String
+  department     String
+  validUntil     String   @map("valid_until")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+}

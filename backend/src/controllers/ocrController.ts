@@ -10,6 +10,13 @@ export const processDocument = async (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
+
+    // Ensure uploads directory exists
+    const uploadsDir = "uploads";
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    
     // Paths
     const inputPath = req.file.path;
     const processedPath = path.join("uploads", `processed-${Date.now()}.png`);
@@ -26,7 +33,7 @@ export const processDocument = async (req: Request, res: Response) => {
     // Cleanup input (keep processed for debugging if needed)
     fs.unlinkSync(inputPath);
     // fs.unlinkSync(processedPath); // Uncomment to delete processed image after OCR
-    fs.unlinkSync(processedPath);
+     fs.unlinkSync(processedPath);
 
     res.json({
       message: "Document processed successfully",

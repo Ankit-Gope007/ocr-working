@@ -12,10 +12,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@prisma/client": "^6.16.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "pdf-poppler": "^0.2.1",
+    "prisma": "^6.16.0",
     "sharp": "^0.34.3",
     "tesseract.js": "^6.0.1"
   },

@@ -1,14 +1,14 @@
 import prisma from "../../models/prismaClient"; 
 
 type UserDetails = {
-    name?: string;
-    institution?: string;
-    registration_no?: string;
-    date_of_birth?: string;
-    blood_group?: string;
-    programme?: string;
-    department?: string;
-    valid_until?: string;
+    name?: string | null;
+    institution?: string | null;
+    registration_no?: string | null;
+    date_of_birth?: string | null;
+    blood_group?: string | null;
+    programme?: string | null;
+    department?: string | null;
+    valid_until?: string | null;
 };
 
 // {

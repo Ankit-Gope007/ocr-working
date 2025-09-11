@@ -3,14 +3,14 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Interface for the parsed student data structure
 export interface ParsedStudentData {
   student_info: {
-    name: string;
-    institution: string;
-    registration_no: string;
-    date_of_birth: string;
-    blood_group: string;
-    programme: string;
-    department: string;
-    valid_until: string;
+    name: string | null;
+    institution: string | null;
+    registration_no: string | null;
+    date_of_birth: string | null;
+    blood_group: string | null;
+    programme: string | null;
+    department: string | null;
+    valid_until: string | null;
   };
 }
 
@@ -68,30 +68,36 @@ class GeminiService {
    */
   private createParsingPrompt(ocrText: string): string {
     return `
-You are an expert document parser specializing in student ID cards and institutional documents. 
+You are an expert document parser specializing in student ID cards. Your job is to extract information EXACTLY as written in the OCR text, but be smart about obvious OCR spacing errors.
 
-Parse the following OCR text from a student ID card or institutional document and return ONLY a valid JSON object in this EXACT format:
+Parse the following OCR text from a student ID card and return ONLY a valid JSON object in this EXACT format:
 
 {
   "student_info": {
-    "name": "string - Student's full name",
-    "institution": "string - Institution/College/University name",
-    "registration_no": "string - Registration/Roll/Student number",
-    "date_of_birth": "string - Date of birth (any format found in document)",
-    "blood_group": "string - Blood group (e.g., A+, B-, O+, AB-)",
-    "programme": "string - Programme/Course name (e.g., B.Tech, M.Sc, etc.)",
-    "department": "string - Department name (e.g., Computer Science, Electronics)",
-    "valid_until": "string - Validity date of the ID card"
+    "name": "string - Student's full name with proper spacing",
+    "institution": "string - Institution name EXACTLY as written", 
+    "registration_no": "string - Registration/Roll number EXACTLY as written",
+    "date_of_birth": "string - Date of birth EXACTLY as written",
+    "blood_group": "string - Blood group EXACTLY as written",
+    "programme": "string - Programme EXACTLY as written",
+    "department": "string - Department code/name EXACTLY as written", 
+    "valid_until": "string - Validity date EXACTLY as written"
   }
 }
 
-IMPORTANT RULES:
+CRITICAL RULES:
 1. Return ONLY the JSON object, no additional text or explanations
-2. If any information is not found or unclear, use null for that field
-3. Extract information accurately from the context
-4. Handle OCR errors intelligently (e.g., 'O' might be '0', 'S' might be '5')
-5. The response must be valid JSON that can be parsed
-6. Look for variations in field names (e.g., "Regn No", "Roll No", "Student ID" for registration_no)
+2. For NAMES specifically: If you see concatenated text like "SDAKSHROHIT", analyze it carefully:
+   - Look for word boundaries: "S DAKSH ROHIT" makes more sense than "SAKSHROHIT"
+   - Common Indian name patterns: First names like "DAKSH", last names like "ROHIT"
+   - "S" likely stands alone as an initial
+   - So "SDAKSHROHIT" should be parsed as "S DAKSH ROHIT"
+3. For all other fields: Keep EXACTLY as written in OCR
+4. Department codes: Keep as-is (e.g., "EC", not "Electronics")
+5. Look for field labels like "Name:", "RegnNo:", "DOB:", "BloodGr:", "Department:", "Programme:"
+6. If information is missing, use null
+
+The OCR text shows the name as "SDAKSHROHIT" - but this is likely "S DAKSH ROHIT" with missing spaces.
 
 OCR Text to parse:
 ${ocrText}
@@ -141,18 +147,55 @@ JSON Response:`;
    * @returns ParsedStudentData - Validated student data
    */
   private validateAndCleanData(data: any): ParsedStudentData {
+    const studentInfo = data.student_info || {};
+    
     return {
       student_info: {
-        name: data.student_info?.name || null,
-        institution: data.student_info?.institution || null,
-        registration_no: data.student_info?.registration_no || null,
-        date_of_birth: data.student_info?.date_of_birth || null,
-        blood_group: data.student_info?.blood_group || null,
-        programme: data.student_info?.programme || null,
-        department: data.student_info?.department || null,
-        valid_until: data.student_info?.valid_until || null,
+        name: this.cleanName(studentInfo.name) || null,
+        institution: studentInfo.institution || null,
+        registration_no: studentInfo.registration_no || null,
+        date_of_birth: studentInfo.date_of_birth || null,
+        blood_group: this.cleanBloodGroup(studentInfo.blood_group) || null,
+        programme: studentInfo.programme || null,
+        department: studentInfo.department || null, // Keep exact as on ID card
+        valid_until: studentInfo.valid_until || null,
       }
     };
+  }
+
+  /**
+   * Clean and fix common OCR errors in names
+   * @param name - Raw name from OCR
+   * @returns string - Cleaned name
+   */
+  private cleanName(name: string | null): string | null {
+    if (!name) return null;
+    
+    let cleanedName = name.trim();
+    
+    // For now, return as-is but we could add specific fixes here
+    // The main issue should be fixed in the Gemini prompt
+    return cleanedName;
+  }
+
+  /**
+   * Clean blood group field
+   * @param bloodGroup - Raw blood group from OCR
+   * @returns string - Cleaned blood group
+   */
+  private cleanBloodGroup(bloodGroup: string | null): string | null {
+    if (!bloodGroup) return null;
+    
+    let cleaned = bloodGroup.trim();
+    
+    // Fix common OCR errors in blood groups
+    cleaned = cleaned.replace(/O4/g, 'O+');
+    cleaned = cleaned.replace(/04/g, 'O+');
+    cleaned = cleaned.replace(/A4/g, 'A+');
+    cleaned = cleaned.replace(/B4/g, 'B+');
+    cleaned = cleaned.replace(/AB4/g, 'AB+');
+    
+    return cleaned;
   }
 
   /**

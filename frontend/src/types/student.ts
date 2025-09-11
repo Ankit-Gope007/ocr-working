@@ -19,3 +19,17 @@ export interface OCRResponse {
   rawText: string;
   parsed: ParsedStudentData;
 }
+
+// Batch upload response type
+export interface BatchUploadResponse {
+  message: string;
+  totalProcessed: number;
+  successful: number;
+  failed: number;
+  results: Array<{
+    filename: string;
+    success: boolean;
+    data?: ParsedStudentData;
+    error?: string;
+  }>;
+}

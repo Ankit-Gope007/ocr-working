@@ -38,9 +38,9 @@ export const processDocument = async (req: Request, res: Response) => {
     const text = await runOCR(processedPath);
     const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
-     if (parsedData) {
-      await saveUserId(parsedData.student_info);
-    }
+    //  if (parsedData) {
+    //   await saveUserId(parsedData.student_info);
+    // }
 
     const studentInfo = parsedData.student_info;
     if (!studentInfo || !studentInfo.name || !studentInfo.registration_no || !studentInfo.department || !studentInfo.programme || !studentInfo.valid_until) {
@@ -77,6 +77,10 @@ export const processDocument = async (req: Request, res: Response) => {
       certHash,
       blockchainAdded: true,   // ✅ Added
     });
+     if (parsedData) {
+      await saveUserId(parsedData.student_info);
+    }
+    
   } catch (err) {
     console.error("OCR Error:", err);
     res.status(500).json({ error: "Failed to process document" });
@@ -109,11 +113,6 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
         const text = await runOCR(processedPath);
         const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
-        // --- Fix is here ---
-        if (parsedData && parsedData.student_info && parsedData.student_info.name) {
-          await saveUserId(parsedData.student_info); // This line is changed to pass the full object
-        }
-        // --- End of Fix ---
 
         const studentInfo = parsedData.student_info;
         if (!studentInfo || !studentInfo.name || !studentInfo.registration_no || !studentInfo.department || !studentInfo.programme || !studentInfo.valid_until) {
@@ -149,7 +148,9 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
           certHash,
           blockchainAdded: true,
         });
-
+         if (parsedData) {
+      await saveUserId(parsedData.student_info);
+    }
         successful++;
       } catch (error) {
         console.error(`[ERROR processing ${file.originalname}]:`, error);

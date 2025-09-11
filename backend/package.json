@@ -12,11 +12,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-
     "@google/generative-ai": "^0.24.1",
-
     "@prisma/client": "^6.16.0",
-
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
@@ -24,7 +21,8 @@
     "pdf-poppler": "^0.2.1",
     "prisma": "^6.16.0",
     "sharp": "^0.34.3",
-    "tesseract.js": "^6.0.1"
+    "tesseract.js": "^6.0.1",
+    "web3": "^4.16.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { apiBase } from "@/utils/apiRoute";
-import { ParsedStudentData, OCRResponse } from "@/types/student";
+import { ParsedStudentData } from "@/types/student";
 
 interface BatchUploadResponse {
   message: string;
@@ -14,6 +14,7 @@ interface BatchUploadResponse {
     success: boolean;
     data?: ParsedStudentData;
     error?: string;
+    certHash?: string;
   }>;
 }
 
@@ -24,8 +25,10 @@ export default function HomePage() {
   const [results, setResults] = useState<BatchUploadResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // This function is simplified and corrected to handle multiple files.
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
+      // Direct assignment works correctly.
       setFiles(e.target.files);
     }
   };
@@ -35,9 +38,9 @@ export default function HomePage() {
 
     const formData = new FormData();
     
-    // Append all files
-    Array.from(files).forEach((file, index) => {
-      formData.append(`files`, file);
+    // Append all files using the correct field name "files", as configured on the backend.
+    Array.from(files).forEach((file) => {
+      formData.append("files", file);
     });
     
     // Append metadata
@@ -174,7 +177,6 @@ export default function HomePage() {
                 </p>
                 <div className="flex items-center justify-center space-x-4 text-sm text-text-secondary">
                   <span>Images</span>
-                  {/* <span>📄 PDF</span> */}
                   <span>- Max 4 files</span>
                 </div>
               </div>
@@ -343,6 +345,13 @@ export default function HomePage() {
                           <p className="text-text-primary font-medium text-xs">{result.data.student_info.institution || 'Not found'}</p>
                         </div>
                       </div>
+                      {/* New: Blockchain Transaction Hash */}
+                      {result.certHash && (
+                        <div className="mt-4 border-t border-border pt-4">
+                          <h5 className="text-xs text-text-secondary uppercase tracking-wide font-medium mb-1">Blockchain Transaction Hash</h5>
+                          <p className="text-primary font-mono text-sm break-all">{result.certHash}</p>
+                        </div>
+                      )}
                     </div>
                   ) : result.error && (
                     <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">

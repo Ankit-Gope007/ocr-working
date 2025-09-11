@@ -3,12 +3,22 @@ import path from "path";
 import fs from "fs";
 import { preprocessImage } from "../utils/preprocess";
 import { runOCR } from "../utils/ocr";
-
 import { geminiService } from "../services/geminiService";
-
-import { parseCollegeIDCard } from "../utils/parser";
 import { saveUserId } from "./dbControllers/UserId.controller";
+import { issueCertificate } from "../utils/blockchain";
 
+interface ParsedStudentData {
+  student_info: {
+    name: string | null;
+    institution: string | null;
+    registration_no: string | null;
+    date_of_birth: string | null;
+    blood_group: string | null;
+    programme: string | null;
+    department: string | null;
+    valid_until: string | null;
+  };
+}
 
 export const processDocument = async (req: Request, res: Response) => {
   try {
@@ -16,53 +26,61 @@ export const processDocument = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    // Ensure uploads directory exists
     const uploadsDir = "uploads";
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
-    // Paths
     const inputPath = req.file.path;
     const processedPath = path.join("uploads", `processed-${Date.now()}.png`);
 
-    //1.  Preprocess image
     await preprocessImage(inputPath, processedPath);
-
-    // 2. Run OCR
     const text = await runOCR(processedPath);
-    console.log("[RAW OCR TEXT]:");
-    console.log(text);
-    console.log("================");
+    const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
-    // 3. Parse text using Gemini AI
-    const parsedData = await geminiService.parseStudentData(text);
-    console.log(" [PARSED DATA]:");
-    console.log(JSON.stringify(parsedData, null, 2));
+    //  if (parsedData) {
+    //   await saveUserId(parsedData.student_info);
+    // }
 
-
-    // 4. save in the db 
-    
-    // 4. Save userId if present
-    if (parsedData) {
-      await saveUserId(parsedData.student_info);
+    const studentInfo = parsedData.student_info;
+    if (!studentInfo || !studentInfo.name || !studentInfo.registration_no || !studentInfo.department || !studentInfo.programme || !studentInfo.valid_until) {
+      return res.status(400).json({ error: "Parsed data missing required fields for blockchain submission." });
     }
 
+    // --- Fix for Invalid Date Format ---
+    const dateParts = studentInfo.valid_until.split('.');
+    if (dateParts.length !== 3) {
+      return res.status(400).json({ error: `Invalid date format for 'valid_until': ${studentInfo.valid_until}` });
+    }
+    const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+    const validUntilTimestamp = Date.parse(formattedDate);
+    // --- End of Fix ---
 
+    if (isNaN(validUntilTimestamp)) {
+      return res.status(400).json({ error: `Could not parse date: ${studentInfo.valid_until}` });
+    }
 
-    // Cleanup input (keep processed for debugging if needed)
+    const certHash = await issueCertificate(
+      studentInfo.name,
+      studentInfo.registration_no,
+      studentInfo.department,
+      studentInfo.programme,
+      validUntilTimestamp
+    );
+
     fs.unlinkSync(inputPath);
-    // fs.unlinkSync(processedPath); // Uncomment to delete processed image after OCR
-     fs.unlinkSync(processedPath);
+    fs.unlinkSync(processedPath);
 
     res.json({
-      message: "Document processed successfully",
-      
-      processedFile: processedPath,
-    
-      rawText: text,
+      message: "Document processed successfully and certificate issued on blockchain.",
       parsed: parsedData,
+      certHash,
+      blockchainAdded: true,   // ✅ Added
     });
+     if (parsedData) {
+      await saveUserId(parsedData.student_info);
+    }
+    
   } catch (err) {
     console.error("OCR Error:", err);
     res.status(500).json({ error: "Failed to process document" });
@@ -77,9 +95,6 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
     }
 
     const { documentType, institution } = req.body;
-    console.log(`[BATCH UPLOAD] Processing ${files.length} files for ${institution} - Document type: ${documentType}`);
-
-    // Ensure uploads directory exists
     const uploadsDir = "uploads";
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
@@ -89,49 +104,56 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
     let successful = 0;
     let failed = 0;
 
-    // Process each file
     for (const file of files) {
       try {
-        console.log(`[PROCESSING] ${file.originalname}`);
-        
-        // Paths
         const inputPath = file.path;
         const processedPath = path.join("uploads", `processed-${Date.now()}-${file.filename}.png`);
 
-        // 1. Preprocess image
         await preprocessImage(inputPath, processedPath);
-
-        // 2. Run OCR
         const text = await runOCR(processedPath);
-        console.log(`[RAW OCR TEXT for ${file.originalname}]:`);
-        console.log(text);
+        const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
-        // 3. Parse text using Gemini AI
-        const parsedData = await geminiService.parseStudentData(text);
-        console.log(`[PARSED DATA for ${file.originalname}]:`);
-        console.log(JSON.stringify(parsedData, null, 2));
 
-        // 4. Save to database
-        if (parsedData && parsedData.student_info) {
-          await saveUserId(parsedData.student_info);
+        const studentInfo = parsedData.student_info;
+        if (!studentInfo || !studentInfo.name || !studentInfo.registration_no || !studentInfo.department || !studentInfo.programme || !studentInfo.valid_until) {
+          throw new Error("Missing required fields for blockchain submission.");
         }
 
-        // Cleanup files
+        const dateParts = studentInfo.valid_until.split('.');
+        if (dateParts.length !== 3) {
+          throw new Error(`Invalid date format for 'valid_until': ${studentInfo.valid_until}`);
+        }
+        const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+        const validUntilTimestamp = Date.parse(formattedDate);
+
+        if (isNaN(validUntilTimestamp)) {
+          throw new Error(`Could not parse date: ${studentInfo.valid_until}`);
+        }
+
+        const certHash = await issueCertificate(
+          studentInfo.name,
+          studentInfo.registration_no,
+          studentInfo.department,
+          studentInfo.programme,
+          validUntilTimestamp
+        );
+
         fs.unlinkSync(inputPath);
         fs.unlinkSync(processedPath);
 
         results.push({
           filename: file.originalname,
           success: true,
-          data: parsedData
+          data: parsedData,
+          certHash,
+          blockchainAdded: true,
         });
-        
+         if (parsedData) {
+      await saveUserId(parsedData.student_info);
+    }
         successful++;
-        
       } catch (error) {
         console.error(`[ERROR processing ${file.originalname}]:`, error);
-        
-        // Cleanup input file even on error
         try {
           if (fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
@@ -139,13 +161,12 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
         } catch (cleanupError) {
           console.error("Cleanup error:", cleanupError);
         }
-
         results.push({
           filename: file.originalname,
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error occurred'
+          error: error instanceof Error ? error.message : "Unknown error occurred",
+          blockchainAdded: false,
         });
-        
         failed++;
       }
     }
@@ -157,16 +178,13 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
       failed,
       results,
       documentType,
-      institution
+      institution,
     });
-
   } catch (err) {
     console.error("Batch OCR Error:", err);
-    
-    // Cleanup any remaining files
     const files = req.files as Express.Multer.File[];
     if (files) {
-      files.forEach(file => {
+      files.forEach((file) => {
         try {
           if (fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
@@ -176,7 +194,6 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
         }
       });
     }
-
     res.status(500).json({ error: "Failed to process batch documents" });
   }
 };

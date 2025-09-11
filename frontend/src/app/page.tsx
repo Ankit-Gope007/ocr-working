@@ -14,6 +14,7 @@ interface BatchUploadResponse {
     success: boolean;
     data?: ParsedStudentData;
     error?: string;
+    certHash?: string; // New: Add certHash to successful results
   }>;
 }
 
@@ -343,6 +344,13 @@ export default function HomePage() {
                           <p className="text-text-primary font-medium text-xs">{result.data.student_info.institution || 'Not found'}</p>
                         </div>
                       </div>
+                      {/* New: Blockchain Transaction Hash */}
+                      {result.certHash && (
+                        <div className="mt-4 border-t border-border pt-4">
+                          <h5 className="text-xs text-text-secondary uppercase tracking-wide font-medium mb-1">Blockchain Transaction Hash</h5>
+                          <p className="text-primary font-mono text-sm break-all">{result.certHash}</p>
+                        </div>
+                      )}
                     </div>
                   ) : result.error && (
                     <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">

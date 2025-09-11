@@ -38,8 +38,8 @@ export const processDocument = async (req: Request, res: Response) => {
     const text = await runOCR(processedPath);
     const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
-    if (parsedData && parsedData.student_info && parsedData.student_info.name) {
-      await saveUserId({ name: parsedData.student_info.name });
+     if (parsedData) {
+      await saveUserId(parsedData.student_info);
     }
 
     const studentInfo = parsedData.student_info;
@@ -109,23 +109,23 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
         const text = await runOCR(processedPath);
         const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
+        // --- Fix is here ---
         if (parsedData && parsedData.student_info && parsedData.student_info.name) {
-          await saveUserId({ name: parsedData.student_info.name });
+          await saveUserId(parsedData.student_info); // This line is changed to pass the full object
         }
+        // --- End of Fix ---
 
         const studentInfo = parsedData.student_info;
         if (!studentInfo || !studentInfo.name || !studentInfo.registration_no || !studentInfo.department || !studentInfo.programme || !studentInfo.valid_until) {
           throw new Error("Missing required fields for blockchain submission.");
         }
 
-        // --- Fix for Invalid Date Format in Batch Processing ---
         const dateParts = studentInfo.valid_until.split('.');
         if (dateParts.length !== 3) {
           throw new Error(`Invalid date format for 'valid_until': ${studentInfo.valid_until}`);
         }
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         const validUntilTimestamp = Date.parse(formattedDate);
-        // --- End of Fix ---
 
         if (isNaN(validUntilTimestamp)) {
           throw new Error(`Could not parse date: ${studentInfo.valid_until}`);
@@ -147,7 +147,7 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
           success: true,
           data: parsedData,
           certHash,
-          blockchainAdded: true,   // ✅ Added
+          blockchainAdded: true,
         });
 
         successful++;
@@ -164,7 +164,7 @@ export const batchProcessDocuments = async (req: Request, res: Response) => {
           filename: file.originalname,
           success: false,
           error: error instanceof Error ? error.message : "Unknown error occurred",
-          blockchainAdded: false,  // ✅ Added
+          blockchainAdded: false,
         });
         failed++;
       }

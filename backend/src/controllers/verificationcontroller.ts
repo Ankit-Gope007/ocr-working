@@ -98,3 +98,88 @@ export const verifyDocument = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const verifyBatchDocuments = async (req: Request, res: Response) => {
+  try {
+    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
+      return res.status(400).json({
+        message: "Batch verification failed",
+        isValid: false,
+        error: "No files uploaded for batch verification."
+      });
+    }
+
+    const results = [];
+
+    for (const file of req.files as Express.Multer.File[]) {
+      const inputPath = file.path;
+      const processedPath = path.join("uploads", `verify-processed-${Date.now()}-${file.filename}.png`);
+      try {
+        await preprocessImage(inputPath, processedPath);
+        const text = await runOCR(processedPath);
+        const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
+
+        const studentInfo = parsedData.student_info;
+        let result;
+        if (
+          !studentInfo?.name ||
+          !studentInfo.registration_no ||
+          !studentInfo.department ||
+          !studentInfo.programme ||
+          !studentInfo.valid_until
+        ) {
+          result = {
+            file: file.originalname,
+            isValid: false,
+            error: "Could not extract all required fields for verification.",
+            studentData: parsedData
+          };
+        } else {
+          const formattedInfo = {
+            name: studentInfo.name,
+            registration_no: studentInfo.registration_no,
+            department: studentInfo.department,
+            programme: studentInfo.programme,
+            valid_until: studentInfo.valid_until,
+          };
+          const generatedHash = createCertificateHash(formattedInfo);
+          const certExists = await checkCertificateExists(generatedHash);
+
+          result = {
+            file: file.originalname,
+            isValid: certExists,
+            studentData: parsedData,
+            blockchainData: {
+              certHash: generatedHash,
+              issuedDate: certExists ? new Date().toISOString() : "",
+              validUntil: studentInfo.valid_until,
+            }
+          };
+        }
+        results.push(result);
+      } catch (err) {
+        results.push({
+          file: file.originalname,
+          isValid: false,
+          error: err instanceof Error ? err.message : "Unknown error"
+        });
+      } finally {
+        [inputPath, processedPath].forEach((f) => {
+          if (fs.existsSync(f)) fs.unlinkSync(f);
+        });
+      }
+    }
+
+    return res.json({
+      message: "Batch verification completed",
+      results
+    });
+  } catch (err) {
+    console.error("Batch Verification Error:", err);
+    return res.status(500).json({
+      message: "Batch verification failed",
+      isValid: false,
+      error: err instanceof Error ? err.message : "Unknown error"
+    });
+  }
+};

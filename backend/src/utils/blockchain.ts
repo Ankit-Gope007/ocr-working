@@ -2,86 +2,101 @@ import Web3 from "web3";
 import CertificateABI from "../../build/contracts/Certificate.json";
 
 const web3 = new Web3("http://127.0.0.1:8545"); // Ganache RPC
-const contractAddress = process.env.CONTRACT_ID; // your deployed contract
-const contract = new web3.eth.Contract(CertificateABI.abi as any, contractAddress);
+const contractAddress = process.env.CONTRACT_ID as string;
+const account = process.env.ACCOUNT as string;
 
-const account = process.env.ACCOUNT; // unlocked Ganache account
+const contract = new web3.eth.Contract(
+  CertificateABI.abi as any,
+  contractAddress
+);
 
-// ---------------- Types ----------------
 interface CertificateData {
   studentName: string;
   regNo: string;
   department: string;
   programme: string;
-  validUntil: string; // solidity uint256 comes as string
+  validUntil: string; // from contract, still string
   issuedOn: string;
-  issuer: string;
 }
 
-// ---------------- Functions ----------------
+/**
+ * Create a certificate hash that exactly matches Solidity's keccak256(abi.encodePacked(...))
+ */
+export const createCertificateHash = (studentInfo: {
+  name: string;
+  registration_no: string;
+  department: string;
+  programme: string;
+  valid_until: string; // "DD.MM.YYYY"
+}): string => {
+  const dateParts = studentInfo.valid_until.split(".");
+  if (dateParts.length !== 3) {
+    throw new Error("Invalid date format. Expected DD.MM.YYYY");
+  }
+
+  // Convert DD.MM.YYYY → YYYY-MM-DD → timestamp (seconds)
+  const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+  const validUntilSeconds = Math.floor(Date.parse(formattedDate) / 1000);
+
+  if (isNaN(validUntilSeconds)) {
+    throw new Error(`Could not parse date: ${studentInfo.valid_until}`);
+  }
+
+  // Must use abi.encodePacked types & order
+  const hash = web3.utils.soliditySha3(
+    { type: "string", value: studentInfo.name.trim() },
+    { type: "string", value: studentInfo.registration_no.trim() },
+    { type: "string", value: studentInfo.department.trim() },
+    { type: "string", value: studentInfo.programme.trim() },
+    { type: "uint256", value: validUntilSeconds.toString() }
+  );
+
+  if (!hash) throw new Error("Failed to generate hash");
+  return hash;
+};
 
 /**
- * Issues a new certificate on the blockchain.
- * @param studentName The student's name.
- * @param regNo The student's registration number.
- * @param department The student's department.
- * @param programme The student's program.
- * @param validUntil The expiration date timestamp.
- * @returns The hash of the newly issued certificate.
+ * Issue a certificate (writes to blockchain)
  */
 export async function issueCertificate(
   studentName: string,
   regNo: string,
   department: string,
   programme: string,
-  validUntil: number // Pass as a number/timestamp from your logic
-) {
+  validUntil: number // already in seconds
+): Promise<string> {
   const tx = await contract.methods
     .issueCertificate(studentName, regNo, department, programme, validUntil)
     .send({ from: account, gas: "3000000" });
 
-  if (!tx.events || !tx.events.CertificateIssued) {
-    throw new Error("No CertificateIssued event found in transaction");
+  const event = tx.events?.CertificateIssued;
+  if (!event) {
+    throw new Error("CertificateIssued event not found");
   }
 
-  const certHash = tx.events.CertificateIssued.returnValues.certHash;
-  return certHash;
+  return event.returnValues.certHash as string;
 }
 
 /**
- * Checks if a certificate hash already exists on the blockchain.
- * This function uses a simple call to a public getter function on the smart contract.
- * We'll assume your contract has a mapping like `mapping(bytes32 => bool) public certificates;`
- * to track issued certificates.
- * @param certHash The unique hash of the certificate to check.
- * @returns A boolean indicating whether the certificate exists.
+ * Get full certificate details by hash
  */
-export async function checkCertificateExists(certHash: string): Promise<boolean> {
-  // If your contract has a public mapping `certificates` you can directly call it.
-  // The contract will return `true` if the key exists, and `false` otherwise.
-  try {
-    const exists = await contract.methods.certificates(certHash).call();
-    return Boolean(exists);
-  } catch (error) {
-    console.error("Error checking certificate existence:", error);
-    // If the contract method doesn't exist or throws an error, assume it doesn't exist
-    return false;
-  }
-}
+export async function verifyCertificate(
+  certHash: string
+): Promise<{
+  studentName: string;
+  regNo: string;
+  department: string;
+  programme: string;
+  validUntil: number;
+  issuedOn: number;
+}> {
+  const cert = (await contract.methods
+    .verifyCertificate(certHash)
+    .call()) as CertificateData;
 
-/**
- * Retrieves and verifies certificate data from the blockchain by its hash.
- * @param certHash The unique hash of the certificate.
- * @returns The certificate data.
- */
-export async function verifyCertificate(certHash: string) {
-  // Check if the certificate exists first to provide a more specific error
-  const exists = await checkCertificateExists(certHash);
-  if (!exists) {
-    throw new Error("Certificate does not exist on the blockchain.");
+  if (Number(cert.issuedOn) === 0) {
+    throw new Error("Certificate does not exist");
   }
-
-  const cert = (await contract.methods.verifyCertificate(certHash).call()) as CertificateData;
 
   return {
     studentName: cert.studentName,
@@ -90,6 +105,22 @@ export async function verifyCertificate(certHash: string) {
     programme: cert.programme,
     validUntil: Number(cert.validUntil),
     issuedOn: Number(cert.issuedOn),
-    issuer: cert.issuer,
   };
+}
+
+/**
+ * Check if certificate exists by hash
+ */
+export async function checkCertificateExists(
+  certHash: string
+): Promise<boolean> {
+  try {
+    const cert = (await contract.methods
+      .verifyCertificate(certHash)
+      .call()) as CertificateData;
+
+    return Number(cert.issuedOn) > 0;
+  } catch {
+    return false;
+  }
 }

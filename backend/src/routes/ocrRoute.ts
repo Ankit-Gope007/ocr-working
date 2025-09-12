@@ -1,14 +1,18 @@
 import express from "express";
 import multer from "multer";
 import path from "path";
-import { processDocument, batchProcessDocuments } from "../controllers/ocrController";
-
+import { processDocument, processBatchDocuments } from "../controllers/ocrController";
+import { verifyDocument ,verifyBatchDocuments} from "../controllers/verificationcontroller";
 const router = express.Router();
 
 // Setup multer for file uploads
 const upload = multer({ dest: path.join(__dirname, "../../uploads/") });
 
+// Existing routes
 router.post("/upload", upload.single("file"), processDocument);
-router.post("/batch-upload", upload.array("files", 4), batchProcessDocuments);
+router.post("/batch-upload", upload.array("files", 4), processBatchDocuments);
 
+// ⬅️ New route for document verification
+router.post("/verify", upload.single("file"), verifyDocument);
+router.post('/verify/batch', upload.array('files'), verifyBatchDocuments);
 export default router;

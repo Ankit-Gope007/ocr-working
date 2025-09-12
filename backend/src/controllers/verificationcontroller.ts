@@ -1,33 +1,20 @@
-// controllers/verificationController.ts
 import { Request, Response } from "express";
 import path from "path";
 import fs from "fs";
 import { preprocessImage } from "../utils/preprocess";
 import { runOCR } from "../utils/ocr";
 import { geminiService } from "../services/geminiService";
-import { checkCertificateExists } from "../utils/blockchain"; // ⬅️ The same function
-import crypto from "crypto";
+import { checkCertificateExists, createCertificateHash } from "../utils/blockchain"; 
 
 interface ParsedStudentData {
   student_info: {
     name: string | null;
-    institution: string | null;
     registration_no: string | null;
-    date_of_birth: string | null;
-    blood_group: string | null;
     programme: string | null;
     department: string | null;
     valid_until: string | null;
   };
 }
-
-// -----------------------------------------------------------------------------
-// Helper function to create the hash of student data (same as before)
-// -----------------------------------------------------------------------------
-const createCertificateHash = (studentInfo: ParsedStudentData['student_info']): string => {
-  const dataString = `${studentInfo.name}-${studentInfo.registration_no}-${studentInfo.department}-${studentInfo.programme}`;
-  return crypto.createHash('sha256').update(dataString).digest('hex');
-};
 
 export const verifyDocument = async (req: Request, res: Response) => {
   try {
@@ -38,36 +25,49 @@ export const verifyDocument = async (req: Request, res: Response) => {
     const inputPath = req.file.path;
     const processedPath = path.join("uploads", `verify-processed-${Date.now()}.png`);
 
-    // Step 1: Preprocess and run OCR on the uploaded document
     await preprocessImage(inputPath, processedPath);
     const text = await runOCR(processedPath);
     const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
     const studentInfo = parsedData.student_info;
-    if (!studentInfo || !studentInfo.name || !studentInfo.registration_no || !studentInfo.department || !studentInfo.programme) {
+    if (
+      !studentInfo ||
+      !studentInfo.name ||
+      !studentInfo.registration_no ||
+      !studentInfo.department ||
+      !studentInfo.programme ||
+      !studentInfo.valid_until
+    ) {
       return res.status(400).json({ error: "Could not extract all required fields for verification." });
     }
 
-    // Step 2: Generate the hash from the extracted data
-    const generatedHash = createCertificateHash(studentInfo);
+    // ✅ Normalize structure for createCertificateHash
+    const formattedInfo = {
+      name: studentInfo.name,
+      registration_no: studentInfo.registration_no,
+      department: studentInfo.department,
+      programme: studentInfo.programme,
+      valid_until: studentInfo.valid_until,
+    };
 
-    // Step 3: Check the blockchain for the generated hash
+    const generatedHash = createCertificateHash(formattedInfo);
     const certExists = await checkCertificateExists(generatedHash);
 
-    // Cleanup files
-    fs.unlinkSync(inputPath);
-    fs.unlinkSync(processedPath);
+    // Safe cleanup
+    [inputPath, processedPath].forEach((file) => {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    });
 
     if (certExists) {
-      res.json({
-        message: "Document is **valid**. A matching certificate was found on the blockchain.",
+      return res.json({
+        message: "✅ Document is valid. A matching certificate was found on the blockchain.",
         status: "valid",
         data: parsedData,
         hash: generatedHash,
       });
     } else {
-      res.status(404).json({
-        message: "Document is **invalid**. No matching certificate found on the blockchain.",
+      return res.status(404).json({
+        message: "❌ Document is invalid. No matching certificate found on the blockchain.",
         status: "invalid",
         data: parsedData,
         hash: generatedHash,
@@ -75,6 +75,10 @@ export const verifyDocument = async (req: Request, res: Response) => {
     }
   } catch (err) {
     console.error("Verification Error:", err);
-    res.status(500).json({ error: "Failed to verify document" });
+
+    return res.status(500).json({
+      error: "Failed to verify document",
+      details: err instanceof Error ? err.message : err,
+    });
   }
 };

@@ -107,6 +107,8 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
   }
 
   const results: any[] = [];
+  let successful = 0;
+  let failed = 0;
 
   for (const file of req.files as Express.Multer.File[]) {
     let inputPath = "";
@@ -128,7 +130,8 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
         !studentInfo.programme ||
         !studentInfo.valid_until
       ) {
-        results.push({ file: file.originalname, success: false, error: "Missing required fields" });
+        failed++;
+        results.push({ filename: file.originalname, success: false, error: "Missing required fields" });
         continue;
       }
 
@@ -142,7 +145,8 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
 
       const exists = await checkCertificateExists(certHash);
       if (exists) {
-        results.push({ file: file.originalname, success: true, blockchainAdded: false, certHash, parsed: parsedData });
+        successful++;
+        results.push({ filename: file.originalname, success: true, data: parsedData, certHash });
         continue;
       }
 
@@ -159,11 +163,13 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
 
       await saveUserId(studentInfo);
 
-      results.push({ file: file.originalname, success: true, blockchainAdded: true, certHash: newHash, parsed: parsedData });
+      successful++;
+      results.push({ filename: file.originalname, success: true, data: parsedData, certHash: newHash });
 
     } catch (err) {
       console.error("Batch OCR Error:", err);
-      results.push({ file: file.originalname, success: false, error: "Failed to process file" });
+      failed++;
+      results.push({ filename: file.originalname, success: false, error: "Failed to process file" });
     } finally {
       [inputPath, processedPath].forEach((p) => {
         if (p && fs.existsSync(p)) fs.unlinkSync(p);
@@ -173,7 +179,9 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
 
   return res.json({
     message: "Batch processing complete",
-    total: results.length,
+    totalProcessed: results.length,
+    successful,
+    failed,
     results,
   });
 };

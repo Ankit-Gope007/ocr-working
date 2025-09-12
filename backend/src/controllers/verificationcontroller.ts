@@ -4,7 +4,7 @@ import fs from "fs";
 import { preprocessImage } from "../utils/preprocess";
 import { runOCR } from "../utils/ocr";
 import { geminiService } from "../services/geminiService";
-import { checkCertificateExists, createCertificateHash } from "../utils/blockchain"; 
+import { checkCertificateExists, createCertificateHash } from "../utils/blockchain";
 
 interface ParsedStudentData {
   student_info: {
@@ -19,7 +19,11 @@ interface ParsedStudentData {
 export const verifyDocument = async (req: Request, res: Response) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded for verification." });
+      return res.status(400).json({
+        message: "Verification failed",
+        isValid: false,
+        error: "No file uploaded for verification."
+      });
     }
 
     const inputPath = req.file.path;
@@ -31,17 +35,20 @@ export const verifyDocument = async (req: Request, res: Response) => {
 
     const studentInfo = parsedData.student_info;
     if (
-      !studentInfo ||
-      !studentInfo.name ||
+      !studentInfo?.name ||
       !studentInfo.registration_no ||
       !studentInfo.department ||
       !studentInfo.programme ||
       !studentInfo.valid_until
     ) {
-      return res.status(400).json({ error: "Could not extract all required fields for verification." });
+      return res.status(400).json({
+        message: "Verification failed",
+        isValid: false,
+        error: "Could not extract all required fields for verification."
+      });
     }
 
-    // ✅ Normalize structure for createCertificateHash
+    // ✅ Normalize structure for hashing
     const formattedInfo = {
       name: studentInfo.name,
       registration_no: studentInfo.registration_no,
@@ -53,32 +60,41 @@ export const verifyDocument = async (req: Request, res: Response) => {
     const generatedHash = createCertificateHash(formattedInfo);
     const certExists = await checkCertificateExists(generatedHash);
 
-    // Safe cleanup
+    // Cleanup
     [inputPath, processedPath].forEach((file) => {
       if (fs.existsSync(file)) fs.unlinkSync(file);
     });
 
     if (certExists) {
       return res.json({
-        message: "✅ Document is valid. A matching certificate was found on the blockchain.",
-        status: "valid",
-        data: parsedData,
-        hash: generatedHash,
+        message: "✅ Document verified successfully",
+        isValid: true,
+        studentData: parsedData,
+        blockchainData: {
+          certHash: generatedHash,
+          issuedDate: new Date().toISOString(), // ⚡ Replace with real issued date if stored on-chain
+          validUntil: studentInfo.valid_until,
+        }
       });
     } else {
       return res.status(404).json({
-        message: "❌ Document is invalid. No matching certificate found on the blockchain.",
-        status: "invalid",
-        data: parsedData,
-        hash: generatedHash,
+        message: "❌ Document verification failed. No matching certificate found on blockchain.",
+        isValid: false,
+        studentData: parsedData,
+        blockchainData: {
+          certHash: generatedHash,
+          issuedDate: "",
+          validUntil: studentInfo.valid_until,
+        }
       });
     }
   } catch (err) {
     console.error("Verification Error:", err);
 
     return res.status(500).json({
-      error: "Failed to verify document",
-      details: err instanceof Error ? err.message : err,
+      message: "Verification failed",
+      isValid: false,
+      error: err instanceof Error ? err.message : "Unknown error"
     });
   }
 };

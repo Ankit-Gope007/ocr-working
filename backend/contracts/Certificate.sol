@@ -8,7 +8,7 @@ contract Certificate {
         string department;    
         string programme;     
         uint256 validUntil;   
-        uint256 issuedOn;     // Added this field
+        uint256 issuedOn;     
     }
 
     mapping(bytes32 => Cert) private certificates;
@@ -30,10 +30,11 @@ contract Certificate {
         string memory _programme,
         uint256 _validUntil
     ) public returns (bytes32) {
-        // Use abi.encode for a more reliable hash
-        bytes32 certHash = keccak256(abi.encode(_studentName, _regNo, _department, _programme, _validUntil));
+        // 🔑 Changed abi.encode → abi.encodePacked
+        bytes32 certHash = keccak256(
+            abi.encodePacked(_studentName, _regNo, _department, _programme, _validUntil)
+        );
         
-        // Prevent duplicate certificates
         require(certificates[certHash].issuedOn == 0, "Certificate with this hash already exists.");
 
         certificates[certHash] = Cert({
@@ -42,7 +43,7 @@ contract Certificate {
             department: _department,
             programme: _programme,
             validUntil: _validUntil,
-            issuedOn: block.timestamp // Set the issuance timestamp
+            issuedOn: block.timestamp
         });
 
         emit CertificateIssued(certHash, _studentName, _regNo, _department, _programme, _validUntil);

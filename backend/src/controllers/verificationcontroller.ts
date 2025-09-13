@@ -200,6 +200,7 @@ export const verifyBatchDocuments = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.error("Batch Verification Error:", err);
+        
         return res.status(500).json({
             message: "Batch verification failed",
             isValid: false,

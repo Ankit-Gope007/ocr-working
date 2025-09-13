@@ -127,18 +127,23 @@ export const verifyBatchDocuments = async (req: Request, res: Response) => {
             const inputPath = file.path;
             const processedPath = path.join("uploads", `verify-processed-${Date.now()}-${file.filename}.png`);
 
-            // 0. Metadata forgery check
-            const metaReport = await analyzeMetadata(inputPath);
-            console.log("[METADATA REPORT]:");
-            console.log(JSON.stringify(metaReport, null, 2));
-            // If metadata is suspicious, delete the file , give error and move on to the next file
-            if (metaReport.verdict === "likely_forged" || metaReport.verdict === "suspicious") {
-                fs.unlinkSync(inputPath);
-                throw new Error(`Metadata forgery suspicion: ${metaReport.summary.join("; ")}`);
-            }
-
-
             try {
+                // 0. Metadata forgery check
+                const metaReport = await analyzeMetadata(inputPath);
+                console.log("[METADATA REPORT]:");
+                console.log(JSON.stringify(metaReport, null, 2));
+                
+                // If metadata is suspicious, add to results as failed and continue to next file
+                if (metaReport.verdict === "likely_forged" || metaReport.verdict === "suspicious") {
+                    results.push({
+                        file: file.originalname,
+                        isValid: false,
+                        error: `Metadata forgery detected: ${metaReport.summary.join("; ")}`,
+                        metadataReport: metaReport
+                    });
+                    continue; // Skip to next file
+                }
+
                 await preprocessImage(inputPath, processedPath);
                 const text = await runOCR(processedPath);
                 const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
@@ -200,6 +205,7 @@ export const verifyBatchDocuments = async (req: Request, res: Response) => {
         });
     } catch (err) {
         console.error("Batch Verification Error:", err);
+        
         return res.status(500).json({
             message: "Batch verification failed",
             isValid: false,

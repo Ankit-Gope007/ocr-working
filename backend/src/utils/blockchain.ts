@@ -1,9 +1,15 @@
 import Web3 from "web3";
 import CertificateABI from "../../build/contracts/Certificate.json";
+require("dotenv").config();
 
-const web3 = new Web3("http://127.0.0.1:8545"); // Ganache RPC
+const web3 = new Web3(process.env.RPC_URL as string);
+
+// Load account from private key
+const privateKey = process.env.PRIVATE_KEY as string;
+const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+web3.eth.accounts.wallet.add(account);
+
 const contractAddress = process.env.CONTRACT_ID as string;
-const account = process.env.ACCOUNT as string;
 
 const contract = new web3.eth.Contract(
   CertificateABI.abi as any,
@@ -15,26 +21,25 @@ interface CertificateData {
   regNo: string;
   department: string;
   programme: string;
-  validUntil: string; // from contract, still string
+  validUntil: string;
   issuedOn: string;
 }
 
 /**
- * Create a certificate hash that exactly matches Solidity's keccak256(abi.encodePacked(...))
+ * Create a certificate hash
  */
 export const createCertificateHash = (studentInfo: {
   name: string;
   registration_no: string;
   department: string;
   programme: string;
-  valid_until: string; // "DD.MM.YYYY"
+  valid_until: string;
 }): string => {
   const dateParts = studentInfo.valid_until.split(".");
   if (dateParts.length !== 3) {
     throw new Error("Invalid date format. Expected DD.MM.YYYY");
   }
 
-  // Convert DD.MM.YYYY → YYYY-MM-DD → timestamp (seconds)
   const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
   const validUntilSeconds = Math.floor(Date.parse(formattedDate) / 1000);
 
@@ -42,7 +47,6 @@ export const createCertificateHash = (studentInfo: {
     throw new Error(`Could not parse date: ${studentInfo.valid_until}`);
   }
 
-  // Must use abi.encodePacked types & order
   const hash = web3.utils.soliditySha3(
     { type: "string", value: studentInfo.name.trim() },
     { type: "string", value: studentInfo.registration_no.trim() },
@@ -56,20 +60,37 @@ export const createCertificateHash = (studentInfo: {
 };
 
 /**
- * Issue a certificate (writes to blockchain)
+ * Issue a certificate (writes to blockchain, signed locally)
  */
 export async function issueCertificate(
   studentName: string,
   regNo: string,
   department: string,
   programme: string,
-  validUntil: number // already in seconds
+  validUntil: number
 ): Promise<string> {
-  const tx = await contract.methods
-    .issueCertificate(studentName, regNo, department, programme, validUntil)
-    .send({ from: account, gas: "3000000" });
+  const tx = contract.methods.issueCertificate(
+    studentName,
+    regNo,
+    department,
+    programme,
+    validUntil
+  );
 
-  const event = tx.events?.CertificateIssued;
+  const gas = await tx.estimateGas({ from: account.address });
+  const gasPrice = await web3.eth.getGasPrice();
+
+  const receipt = await tx
+    .send({
+      from: account.address,
+      gas: gas.toString(),
+      gasPrice: gasPrice.toString(),
+    })
+    .once("transactionHash", (hash: string) => {
+      console.log("Tx hash:", hash);
+    });
+
+  const event = receipt.events?.CertificateIssued;
   if (!event) {
     throw new Error("CertificateIssued event not found");
   }
@@ -78,7 +99,7 @@ export async function issueCertificate(
 }
 
 /**
- * Get full certificate details by hash
+ * Get certificate details
  */
 export async function verifyCertificate(
   certHash: string
@@ -109,7 +130,7 @@ export async function verifyCertificate(
 }
 
 /**
- * Check if certificate exists by hash
+ * Check if certificate exists
  */
 export async function checkCertificateExists(
   certHash: string
@@ -118,7 +139,6 @@ export async function checkCertificateExists(
     const cert = (await contract.methods
       .verifyCertificate(certHash)
       .call()) as CertificateData;
-
     return Number(cert.issuedOn) > 0;
   } catch {
     return false;

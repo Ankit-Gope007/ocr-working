@@ -29,7 +29,7 @@ class GeminiService {
     this.genAI = new GoogleGenerativeAI(apiKey);
 
     // Use the gemini-1.5-flash model (you can change this to gemini-pro if needed)
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   }
 
   /**

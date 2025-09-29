@@ -175,8 +175,17 @@ export async function analyzeMetadata(filePath: string): Promise<MetaReport> {
     report.summary.push("No metadata available to inspect.");
   }
 
-  // Close exiftool process (important)
-  try { await exiftool.end(); } catch (_) {}
+  // Don't close exiftool process here - let it stay alive for batch processing
+  // The process will be automatically cleaned up when the Node.js process exits
 
   return report;
+}
+
+// Export a function to manually close exiftool when needed
+export async function closeExiftool() {
+  try {
+    await exiftool.end();
+  } catch (err) {
+    console.error("Error closing exiftool:", err);
+  }
 }

@@ -149,11 +149,13 @@ export const verifyBatchDocuments = async (req: Request, res: Response) => {
             const inputPath = file.path;
             const processedPath = path.join("uploads", `verify-processed-${Date.now()}-${file.filename}.png`);
 
+
             let currentFileResult: any = {
                 file: file.originalname,
                 isValid: false,
                 error: "Verification pending"
             };
+
 
             try {
                 // 0. Metadata forgery check
@@ -161,8 +163,17 @@ export const verifyBatchDocuments = async (req: Request, res: Response) => {
                 console.log("[METADATA REPORT]:");
                 console.log(JSON.stringify(metaReport, null, 2));
 
+                
+                // If metadata is suspicious, add to results as failed and continue to next file
                 if (metaReport.verdict === "likely_forged" || metaReport.verdict === "suspicious") {
-                    throw new Error(`Metadata forgery suspicion: ${metaReport.summary.join("; ")}`);
+                    results.push({
+                        file: file.originalname,
+                        isValid: false,
+                        error: `Metadata forgery detected: ${metaReport.summary.join("; ")}`,
+                        metadataReport: metaReport
+                    });
+                    continue; // Skip to next file
+
                 }
 
                 await preprocessImage(inputPath, processedPath);
@@ -248,7 +259,9 @@ export const verifyBatchDocuments = async (req: Request, res: Response) => {
     } catch (err) {
         console.error("Batch Verification Error:", err);
         
+
         // This catch block handles catastrophic failures like an empty upload or the metadata check throwing an error.
+
         return res.status(500).json({
             message: "Batch verification failed due to a critical error.",
             isValid: false,

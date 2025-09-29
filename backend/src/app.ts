@@ -5,12 +5,11 @@ import ocrRoutes from "./routes/ocrRoute";
 
 const app = express();
 
-app.use(cors(
-  {
-  origin: "*",
-
-}
-));
+app.use(cors({
+  origin: '*',
+  methods: '*',
+  allowedHeaders: '*'
+}));
 app.use(express.json());
 
 // Routes

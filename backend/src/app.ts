@@ -8,7 +8,7 @@ const app = express();
 app.use(cors(
   {
   origin: "*",
-  allowedHeaders: "Content-Type",
+
 }
 ));
 app.use(express.json());

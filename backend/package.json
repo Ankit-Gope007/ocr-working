@@ -14,9 +14,12 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.16.0",
+    "@truffle/hdwallet-provider": "^2.1.15",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
+    "exiftool-vendored": "^30.5.0",
     "express": "^5.1.0",
+    "file-type": "^21.0.0",
     "multer": "^2.0.2",
     "pdf-poppler": "^0.2.1",
     "prisma": "^6.16.0",

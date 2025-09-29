@@ -7,7 +7,7 @@ const app = express();
 
 app.use(cors(
   {
-  origin: "https://ocr-working-6udoddpxr-ankit-gopes-projects-893eb2f8.vercel.app",
+  origin: "*",
 }
 ));
 app.use(express.json());

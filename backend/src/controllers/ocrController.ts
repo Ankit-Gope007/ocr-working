@@ -6,6 +6,39 @@ import { runOCR } from "../utils/ocr";
 import { geminiService } from "../services/geminiService";
 import { saveUserId } from "./dbControllers/UserId.controller";
 import { issueCertificate, checkCertificateExists, createCertificateHash } from "../utils/blockchain";
+import { exec } from "child_process";
+
+
+export async function convertPdfToImages(
+  pdfPath: string,
+  outputDir: string
+): Promise<string[]> {
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+  const timestamp = Date.now();
+  const outputPrefix = path.join(outputDir, `pdf-${timestamp}-page`);
+
+  return new Promise((resolve, reject) => {
+    exec(
+      `pdftoppm -png "${pdfPath}" "${outputPrefix}"`,
+      (err, stdout, stderr) => {
+        if (err) return reject(err);
+
+        const files = fs
+          .readdirSync(outputDir)
+          .filter(
+            (f) => f.startsWith(`pdf-${timestamp}-page`) && f.endsWith(".png")
+          )
+          .map((f) => path.join(outputDir, f));
+
+        if (files.length === 0)
+          return reject(new Error("No images generated from PDF"));
+
+        resolve(files);
+      }
+    );
+  });
+}
 
 interface ParsedStudentData {
   student_info: {
@@ -34,10 +67,20 @@ export const processDocument = async (req: Request, res: Response) => {
     }
 
     inputPath = req.file.path;
-    processedPath = path.join(uploadsDir, `processed-${Date.now()}.png`);
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let imagePaths: string[] = [];
 
-    await preprocessImage(inputPath, processedPath);
-    const text = await runOCR(processedPath);
+    if (ext === ".pdf") {
+      imagePaths = await convertPdfToImages(inputPath, uploadsDir);
+    } else {
+      processedPath = path.join(uploadsDir, `processed-${Date.now()}.png`);
+      await preprocessImage(inputPath, processedPath);
+      imagePaths = [processedPath];
+    }
+
+    // Run OCR on all images (take first page for single-document processing)
+    const text = await runOCR(imagePaths[0]);
+
     const parsedData: ParsedStudentData = await geminiService.parseStudentData(text);
 
     const studentInfo = parsedData.student_info;
@@ -113,13 +156,41 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
   for (const file of req.files as Express.Multer.File[]) {
     let inputPath = "";
     let processedPath = "";
+    let imagePaths: string[] = [];
+    const tempImagePaths: string[] = []; // Array to hold temporary image paths for cleanup
 
     try {
       inputPath = file.path;
-      processedPath = path.join("uploads", `batch-${Date.now()}-${file.filename}.png`);
+      const ext = path.extname(file.originalname).toLowerCase();
+      const uploadsDir = "uploads";
 
-      await preprocessImage(inputPath, processedPath);
-      const text = await runOCR(processedPath);
+      if (ext === ".pdf") {
+        // PDF files must be converted to images first
+        imagePaths = await convertPdfToImages(inputPath, uploadsDir);
+        // The first page of the PDF is used for OCR, but all generated images need to be cleaned up
+        tempImagePaths.push(...imagePaths);
+        // Preprocess the first page for OCR
+        processedPath = path.join(
+          uploadsDir,
+          `processed-${Date.now()}-temp.png`
+        );
+        await preprocessImage(imagePaths[0], processedPath);
+        imagePaths = [processedPath];
+        tempImagePaths.push(processedPath);
+      } else {
+        // Supported image files are preprocessed directly
+        processedPath = path.join(
+          uploadsDir,
+          `processed-${Date.now()}-temp.png`
+        );
+        await preprocessImage(inputPath, processedPath);
+        imagePaths = [processedPath];
+        tempImagePaths.push(processedPath);
+      }
+
+      // Run OCR on the single, preprocessed image
+      const text = await runOCR(imagePaths[0]);
+
       const parsedData = await geminiService.parseStudentData(text);
 
       const studentInfo = parsedData.student_info;
@@ -131,7 +202,11 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
         !studentInfo.valid_until
       ) {
         failed++;
-        results.push({ filename: file.originalname, success: false, error: "Missing required fields" });
+        results.push({
+          filename: file.originalname,
+          success: false,
+          error: "Missing required fields",
+        });
         continue;
       }
 
@@ -146,12 +221,19 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
       const exists = await checkCertificateExists(certHash);
       if (exists) {
         successful++;
-        results.push({ filename: file.originalname, success: true, data: parsedData, certHash });
+        results.push({
+          filename: file.originalname,
+          success: true,
+          data: parsedData,
+          certHash,
+        });
         continue;
       }
 
       const [dd, mm, yyyy] = studentInfo.valid_until.split(".");
-      const validUntilTimestamp = Math.floor(Date.parse(`${yyyy}-${mm}-${dd}`) / 1000);
+      const validUntilTimestamp = Math.floor(
+        Date.parse(`${yyyy}-${mm}-${dd}`) / 1000
+      );
 
       const newHash = await issueCertificate(
         studentInfo.name,
@@ -164,14 +246,23 @@ export const processBatchDocuments = async (req: Request, res: Response) => {
       await saveUserId(studentInfo);
 
       successful++;
-      results.push({ filename: file.originalname, success: true, data: parsedData, certHash: newHash });
-
+      results.push({
+        filename: file.originalname,
+        success: true,
+        data: parsedData,
+        certHash: newHash,
+      });
     } catch (err) {
       console.error("Batch OCR Error:", err);
       failed++;
-      results.push({ filename: file.originalname, success: false, error: "Failed to process file" });
+      results.push({
+        filename: file.originalname,
+        success: false,
+        error: "Failed to process file",
+      });
     } finally {
-      [inputPath, processedPath].forEach((p) => {
+      // Clean up all temporary files, including converted PDF images
+      [inputPath, ...tempImagePaths].forEach((p) => {
         if (p && fs.existsSync(p)) fs.unlinkSync(p);
       });
     }

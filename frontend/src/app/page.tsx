@@ -176,7 +176,7 @@ export default function HomePage() {
                   or click to browse files
                 </p>
                 <div className="flex items-center justify-center space-x-4 text-sm text-text-secondary">
-                  <span>Images</span>
+                  <span>Images / .pdf</span>
                   <span>- Max 4 files</span>
                 </div>
               </div>

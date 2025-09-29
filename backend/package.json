@@ -20,9 +20,10 @@
     "express": "^5.1.0",
     "file-type": "^21.0.0",
     "multer": "^2.0.2",
+    "pdf-lib": "^1.17.1",
     "pdf-poppler": "^0.2.1",
     "prisma": "^6.16.0",
-    "sharp": "^0.34.3",
+    "sharp": "^0.34.4",
     "tesseract.js": "^6.0.1",
     "web3": "^4.16.0"
   },
